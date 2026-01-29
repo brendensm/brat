@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# brat - bash-based r-adjacent tools
+
+BRAT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+show_help() {
+  echo "brat - bash-based r-adjacent tools"
+  echo ""
+  echo "Usage: brat <command> [arguments]"
+  echo ""
+  echo "Commands:"
+  echo "  project <name>   Create a new R project with standard structure"
+  echo "  install <pkg>    Search CRAN and install R packages interactively"
+  echo "  tt               Browse and explore TidyTuesday datasets"
+  echo "  blog <title>     Create a Quarto blog post template"
+  echo "  help             Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  brat project myanalysis"
+  echo "  brat install dplyr"
+  echo "  brat tt"
+  echo "  brat blog \"My First Post\""
+}
+
+if [[ $# -eq 0 || "$1" == "help" || "$1" == "--help" || "$1" == "-h" ]]; then
+  show_help
+  exit 0
+fi
+
+command="$1"
+shift
+
+case "$command" in
+  project)
+    exec "$BRAT_DIR/project" "$@"
+    ;;
+  install)
+    exec "$BRAT_DIR/install" "$@"
+    ;;
+  tt)
+    exec "$BRAT_DIR/tt" "$@"
+    ;;
+  blog)
+    exec "$BRAT_DIR/blog" "$@"
+    ;;
+  *)
+    echo "Unknown command: $command"
+    echo "Run 'brat help' for usage."
+    exit 1
+    ;;
+esac

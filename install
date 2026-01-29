@@ -1,0 +1,33 @@
+#!/bin/bash
+
+pkg=$1
+
+temp_file=$(mktemp /tmp/packages.XXXXXX.json)
+
+curl -s "https://search.r-pkg.org/package/_search?q=${pkg}&size=10&sort=_score:desc" | \
+  jq --arg pkg "$pkg" '[.hits.hits[]._source] | 
+    sort_by(
+      if .Package == $pkg then 0
+      elif (.Package | ascii_downcase | startswith($pkg | ascii_downcase)) then 1  
+      elif (.Package | ascii_downcase | contains($pkg | ascii_downcase)) then 2
+      elif (.Description | ascii_downcase | contains($pkg | ascii_downcase)) then 3
+      else 4 end
+    )' > "$temp_file"
+
+selected=$(jq -r '.[].Package' "$temp_file" | \
+  nl -v 0 | \
+  fzf --preview "idx=\$(echo {} | cut -f1); jq -r \".[\$idx] | \\\"📦 Package: \\\" + .Package + \\\"\\n🔖 Version: \\\" + (.Version // \\\"N/A\\\") + \\\"\\n👤 Author: \\\" + (.Author // \\\"N/A\\\") + \\\"\\n📧 Maintainer: \\\" + (.Maintainer // \\\"N/A\\\") + \\\"\\n📥 Downloads: \\\" + (.downloads // \\\"N/A\\\" | tostring) + \\\"\\n🔗 Dependencies: \\\" + (.Depends // \\\"None\\\") + \\\"\\n📋 Imports: \\\" + (.Imports // \\\"None\\\") + \\\"\\n\\n📝 Description:\\n\\\" + (.Description // \\\"No description\\\")\" \"$temp_file\" | fold -s -w 60" \
+      --preview-window=top:70%:wrap \
+      --bind 'q:abort' \
+      --prompt="Hit enter to select a package to install or q to quit.")
+
+echo "$selected"
+
+if [ -z $selected ]; then
+            rm "$temp_file"
+            exit 0
+fi
+
+clean_name=$(echo $selected |  awk '{gsub(/^[0-9]+ /, ""); print}')
+R -e "install.packages('$clean_name', repos = 'https://cloud.r-project.org')"
+rm "$temp_file"

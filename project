@@ -1,0 +1,36 @@
+#!/bin/bash
+
+#echo "Please enter your project title: "
+
+#read name
+
+
+
+
+title="${1:-new_project}"
+
+mkdir -p $title/{data-raw,data,ref,output}
+
+cd $title
+
+touch script.R
+
+echo -e 'Version: 1.0
+
+RestoreWorkspace: Default
+SaveWorkspace: Default
+AlwaysSaveHistory: Default
+
+EnableCodeIndexing: Yes
+UseSpacesForTab: Yes
+NumSpacesForTab: 2
+Encoding: UTF-8
+
+RnwWeave: Sweave
+LaTex: pdfLaTeX' >> $title.Rproj
+
+echo "Project $title has been created."
+#echo "It is stored in the R directory."
+#echo "Opening project now..."
+
+#open $name.Rproj

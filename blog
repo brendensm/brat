@@ -1,0 +1,38 @@
+#!/bin/bash
+
+
+title="${1:-new_blog_post}"
+
+#if [ $1 = "blog" ]; then
+
+mkdir $title
+touch ${title}/index.qmd
+echo "
+
+---
+title: "$title"
+author: ""
+date: "$(date -I)"
+categories: []
+description: ""
+engine: knitr
+execute: 
+  warning: false
+  eval: true
+  message: false
+code-fold: show
+code-overflow: scroll
+toc: true
+title-block-banner: true
+lightbox: true
+editor_options: 
+  chunk_output_type: console
+draft: false
+---
+
+
+" > $title/index.qmd
+
+#exit 0
+
+#fi
