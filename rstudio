@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# brat rstudio - open RStudio, optionally with a project/directory
+
+open_rstudio() {
+  if [[ -z "$1" ]]; then
+    open -a RStudio
+  else
+    open -a RStudio "$1"
+  fi
+}
+
+# No argument - just open RStudio
+if [[ $# -eq 0 ]]; then
+  open_rstudio
+  exit 0
+fi
+
+target="$1"
+
+# If target doesn't exist, error out
+if [[ ! -e "$target" ]]; then
+  echo "Error: '$target' does not exist"
+  exit 1
+fi
+
+# If target is already an .Rproj file, open it directly
+if [[ -f "$target" && "$target" == *.Rproj ]]; then
+  open_rstudio "$target"
+  exit 0
+fi
+
+# If target is a directory, look for an .Rproj file
+if [[ -d "$target" ]]; then
+  # Find .Rproj files in the directory (not recursive)
+  rproj_files=("$target"/*.Rproj)
+
+  # Check if any .Rproj files were found
+  if [[ -e "${rproj_files[0]}" ]]; then
+    # If exactly one, open it
+    if [[ ${#rproj_files[@]} -eq 1 ]]; then
+      open_rstudio "${rproj_files[0]}"
+    else
+      # Multiple .Rproj files - let user know and open the first one
+      echo "Multiple .Rproj files found, opening: $(basename "${rproj_files[0]}")"
+      open_rstudio "${rproj_files[0]}"
+    fi
+  else
+    # No .Rproj file, just open the directory
+    open_rstudio "$target"
+  fi
+  exit 0
+fi
+
+# For any other file, just try to open it
+open_rstudio "$target"

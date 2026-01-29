@@ -1,21 +1,37 @@
 #!/bin/bash
 
-#echo "Please enter your project title: "
+# brat project - create a new R project with standard structure
 
-#read name
+BRAT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Parse arguments
+open_after=false
+title=""
 
+for arg in "$@"; do
+  case "$arg" in
+    -o|--open)
+      open_after=true
+      ;;
+    *)
+      if [[ -z "$title" ]]; then
+        title="$arg"
+      fi
+      ;;
+  esac
+done
 
+# Default project name if none provided
+title="${title:-new_project}"
 
-title="${1:-new_project}"
+mkdir -p "$title"/{data-raw,data,ref,output}
 
-mkdir -p $title/{data-raw,data,ref,output}
-
-cd $title
+cd "$title"
 
 touch script.R
 
-echo -e 'Version: 1.0
+cat > "$title.Rproj" << 'EOF'
+Version: 1.0
 
 RestoreWorkspace: Default
 SaveWorkspace: Default
@@ -27,10 +43,11 @@ NumSpacesForTab: 2
 Encoding: UTF-8
 
 RnwWeave: Sweave
-LaTex: pdfLaTeX' >> $title.Rproj
+LaTex: pdfLaTeX
+EOF
 
 echo "Project $title has been created."
-#echo "It is stored in the R directory."
-#echo "Opening project now..."
 
-#open $name.Rproj
+if [[ "$open_after" == true ]]; then
+  exec "$BRAT_DIR/rstudio" "$title.Rproj"
+fi

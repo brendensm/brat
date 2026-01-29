@@ -11,6 +11,9 @@ show_help() {
   echo ""
   echo "Commands:"
   echo "  project <name>   Create a new R project with standard structure"
+  echo "                   Use -o or --open to open in RStudio after creation"
+  echo "  rstudio [path]   Open RStudio (alias: rs)"
+  echo "                   Auto-detects .Rproj files in directories"
   echo "  install <pkg>    Search CRAN and install R packages interactively"
   echo "  tt               Browse and explore TidyTuesday datasets"
   echo "  blog <title>     Create a Quarto blog post template"
@@ -19,6 +22,9 @@ show_help() {
   echo ""
   echo "Examples:"
   echo "  brat project myanalysis"
+  echo "  brat project myanalysis -o"
+  echo "  brat rstudio ."
+  echo "  brat rs ~/R/myproject"
   echo "  brat install dplyr"
   echo "  brat tt"
   echo "  brat blog \"My First Post\""
@@ -35,6 +41,9 @@ shift
 case "$command" in
   project)
     exec "$BRAT_DIR/project" "$@"
+    ;;
+  rstudio|rs)
+    exec "$BRAT_DIR/rstudio" "$@"
     ;;
   install)
     exec "$BRAT_DIR/install" "$@"
