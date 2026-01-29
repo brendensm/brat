@@ -1,0 +1,162 @@
+#!/bin/bash
+
+# brat update - check for and install R package updates
+
+show_help() {
+  echo "Usage: brat update [options]"
+  echo ""
+  echo "Check for and install R package updates."
+  echo ""
+  echo "Options:"
+  echo "  -c, --check    Only check for updates, don't prompt to install"
+  echo "  -h, --help     Show this help message"
+}
+
+check_only=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--check)
+      check_only=true
+      shift
+      ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      show_help
+      exit 1
+      ;;
+  esac
+done
+
+# Get outdated packages from R
+echo "Checking for updates..."
+echo ""
+
+outdated=$(Rscript -e '
+# Use user repos, fall back to cloud CRAN mirror
+if (is.null(getOption("repos")) || getOption("repos")["CRAN"] == "@CRAN@") {
+  options(repos = c(CRAN = "https://cloud.r-project.org"))
+}
+
+old <- tryCatch(old.packages(), error = function(e) NULL)
+
+if (is.null(old) || nrow(old) == 0) {
+  cat("__NONE__\n")
+} else {
+  for (i in seq_len(nrow(old))) {
+    repo <- old[i, "Repository"]
+    is_cran <- grepl("cran|r-project", tolower(repo))
+    cat(sprintf("%s\t%s\t%s\t%s\n",
+        old[i, "Package"],
+        old[i, "Installed"],
+        old[i, "ReposVer"],
+        ifelse(is_cran, "CRAN", "other")))
+  }
+}
+' 2>/dev/null)
+
+if [[ "$outdated" == "__NONE__" ]]; then
+  echo "All packages are up to date."
+  exit 0
+fi
+
+# Parse into arrays
+packages=()
+installed=()
+available=()
+sources=()
+cran_packages=()
+
+while IFS=$'\t' read -r pkg inst avail src; do
+  packages+=("$pkg")
+  installed+=("$inst")
+  available+=("$avail")
+  sources+=("$src")
+  if [[ "$src" == "CRAN" ]]; then
+    cran_packages+=("$pkg")
+  fi
+done <<< "$outdated"
+
+count=${#packages[@]}
+cran_count=${#cran_packages[@]}
+
+# Display the packages
+printf "%-4s %-20s %-12s %-12s %s\n" "#" "Package" "Installed" "Available" "Source"
+printf "%-4s %-20s %-12s %-12s %s\n" "---" "--------------------" "------------" "------------" "------"
+
+for i in "${!packages[@]}"; do
+  num=$((i + 1))
+  printf "%-4s %-20s %-12s %-12s %s\n" "$num" "${packages[$i]}" "${installed[$i]}" "${available[$i]}" "${sources[$i]}"
+done
+
+echo ""
+echo "$count package(s) can be updated ($cran_count from CRAN)."
+
+if [[ "$check_only" == true ]]; then
+  exit 0
+fi
+
+echo ""
+echo "Update options:"
+echo "  a) All packages"
+if [[ $cran_count -gt 0 && $cran_count -lt $count ]]; then
+  echo "  c) CRAN packages only ($cran_count packages)"
+fi
+echo "  n) None"
+echo "  Or enter package numbers (e.g., 1 3 5 or 1,3,5)"
+echo ""
+read -rp "Selection: " selection
+
+# Handle selection
+if [[ -z "$selection" || "$selection" == "n" || "$selection" == "N" ]]; then
+  echo "No packages updated."
+  exit 0
+fi
+
+to_update=()
+
+if [[ "$selection" == "a" || "$selection" == "A" ]]; then
+  to_update=("${packages[@]}")
+elif [[ "$selection" == "c" || "$selection" == "C" ]]; then
+  to_update=("${cran_packages[@]}")
+else
+  # Parse numbers - handle spaces, commas, or both
+  selection="${selection//,/ }"
+  for num in $selection; do
+    if [[ "$num" =~ ^[0-9]+$ ]]; then
+      idx=$((num - 1))
+      if [[ $idx -ge 0 && $idx -lt $count ]]; then
+        to_update+=("${packages[$idx]}")
+      else
+        echo "Warning: $num is out of range, skipping."
+      fi
+    fi
+  done
+fi
+
+if [[ ${#to_update[@]} -eq 0 ]]; then
+  echo "No valid packages selected."
+  exit 0
+fi
+
+echo ""
+echo "Updating ${#to_update[@]} package(s): ${to_update[*]}"
+echo ""
+
+# Build R vector of packages to update
+pkg_vector=$(printf ', "%s"' "${to_update[@]}")
+pkg_vector="c(${pkg_vector:2})"  # Remove leading comma and space
+
+Rscript -e "
+if (is.null(getOption('repos')) || getOption('repos')['CRAN'] == '@CRAN@') {
+  options(repos = c(CRAN = 'https://cloud.r-project.org'))
+}
+install.packages($pkg_vector, quiet = FALSE)
+" 2>&1
+
+echo ""
+echo "Done."
