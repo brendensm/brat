@@ -1,0 +1,131 @@
+#!/bin/bash
+
+# brat clean - remove common R artifacts
+
+show_help() {
+  echo "Usage: brat clean [options] [path]"
+  echo ""
+  echo "Remove common R artifacts from a directory."
+  echo ""
+  echo "Options:"
+  echo "  -n, --dry-run    Show what would be deleted without deleting"
+  echo "  -r, --recursive  Clean subdirectories too"
+  echo "  -h, --help       Show this help message"
+  echo ""
+  echo "Removes:"
+  echo "  .Rhistory        R command history"
+  echo "  .RData           Saved workspace"
+  echo "  .Rapp.history    R.app history (macOS)"
+  echo "  .Rproj.user/     RStudio user files"
+  echo "  *_cache/         Knitr/Quarto cache directories"
+  echo "  *_files/         Knitr/Quarto output files"
+}
+
+dry_run=false
+recursive=false
+target="."
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -n|--dry-run)
+      dry_run=true
+      shift
+      ;;
+    -r|--recursive)
+      recursive=true
+      shift
+      ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      show_help
+      exit 1
+      ;;
+    *)
+      target="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ ! -d "$target" ]]; then
+  echo "Error: '$target' is not a directory"
+  exit 1
+fi
+
+# Track what we clean
+cleaned=()
+
+clean_item() {
+  local item="$1"
+  if [[ -e "$item" ]]; then
+    if [[ "$dry_run" == true ]]; then
+      echo "Would remove: $item"
+    else
+      rm -rf "$item"
+      echo "Removed: $item"
+    fi
+    cleaned+=("$item")
+  fi
+}
+
+clean_rdata() {
+  local item="$1"
+  if [[ -e "$item" ]]; then
+    if [[ "$dry_run" == true ]]; then
+      echo "Would remove: $item (will prompt)"
+      cleaned+=("$item")
+    else
+      echo -n "Delete $item? This contains your saved workspace. [y/N] "
+      read -r response
+      if [[ "$response" =~ ^[Yy]$ ]]; then
+        rm -f "$item"
+        echo "Removed: $item"
+        cleaned+=("$item")
+      else
+        echo "Skipped: $item"
+      fi
+    fi
+  fi
+}
+
+clean_directory() {
+  local dir="$1"
+
+  # Single files
+  clean_item "$dir/.Rhistory"
+  clean_rdata "$dir/.RData"
+  clean_item "$dir/.Rapp.history"
+
+  # Directories
+  clean_item "$dir/.Rproj.user"
+
+  # Pattern matches for cache and files directories
+  for cache_dir in "$dir"/*_cache; do
+    [[ -d "$cache_dir" ]] && clean_item "$cache_dir"
+  done
+
+  for files_dir in "$dir"/*_files; do
+    [[ -d "$files_dir" ]] && clean_item "$files_dir"
+  done
+}
+
+if [[ "$recursive" == true ]]; then
+  # Find all directories and clean each one
+  while IFS= read -r -d '' dir; do
+    clean_directory "$dir"
+  done < <(find "$target" -type d -print0 2>/dev/null)
+else
+  clean_directory "$target"
+fi
+
+if [[ ${#cleaned[@]} -eq 0 ]]; then
+  echo "Nothing to clean."
+elif [[ "$dry_run" == true ]]; then
+  echo ""
+  echo "${#cleaned[@]} item(s) would be removed. Run without -n to delete."
+fi
