@@ -14,7 +14,11 @@ show_help() {
   echo "                   Use -o or --open to open in RStudio after creation"
   echo "  rstudio [path]   Open RStudio (alias: rs)"
   echo "                   Auto-detects .Rproj files in directories"
-  echo "  install <pkg>    Search CRAN and install R packages interactively"
+  echo "  clean [path]     Remove R artifacts (.Rhistory, .RData, caches, etc.)"
+  echo "                   Use -n for dry-run, -r for recursive"
+  echo "  install <pkg>    Install from CRAN (or GitHub with user/repo)"
+  echo "                   Use -s to search CRAN interactively"
+  echo "  update           Check for and install package updates"
   echo "  tt               Browse and explore TidyTuesday datasets"
   echo "  blog <title>     Create a Quarto blog post template"
   echo "  logo             Print the brat logo"
@@ -25,7 +29,12 @@ show_help() {
   echo "  brat project myanalysis -o"
   echo "  brat rstudio ."
   echo "  brat rs ~/R/myproject"
+  echo "  brat clean"
+  echo "  brat clean -rn ~/R"
   echo "  brat install dplyr"
+  echo "  brat install -s tidy"
+  echo "  brat install user/repo"
+  echo "  brat update"
   echo "  brat tt"
   echo "  brat blog \"My First Post\""
 }
@@ -45,8 +54,14 @@ case "$command" in
   rstudio|rs)
     exec "$BRAT_DIR/rstudio" "$@"
     ;;
+  clean)
+    exec "$BRAT_DIR/clean" "$@"
+    ;;
   install)
     exec "$BRAT_DIR/install" "$@"
+    ;;
+  update)
+    exec "$BRAT_DIR/update" "$@"
     ;;
   tt)
     exec "$BRAT_DIR/tt" "$@"
