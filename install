@@ -1,33 +1,194 @@
 #!/bin/bash
 
-pkg=$1
+# brat install - install R packages from CRAN or GitHub
 
-temp_file=$(mktemp /tmp/packages.XXXXXX.json)
+show_help() {
+  echo "Usage: brat install [options] <package>"
+  echo ""
+  echo "Install R packages from CRAN or GitHub."
+  echo ""
+  echo "Options:"
+  echo "  -s, --search    Search CRAN interactively (fuzzy finder)"
+  echo "  -h, --help      Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  brat install dplyr              # Direct CRAN install"
+  echo "  brat install -s tidy            # Search CRAN packages"
+  echo "  brat install tidyverse/ggplot2  # Install from GitHub"
+}
 
-curl -s "https://search.r-pkg.org/package/_search?q=${pkg}&size=10&sort=_score:desc" | \
-  jq --arg pkg "$pkg" '[.hits.hits[]._source] | 
-    sort_by(
-      if .Package == $pkg then 0
-      elif (.Package | ascii_downcase | startswith($pkg | ascii_downcase)) then 1  
-      elif (.Package | ascii_downcase | contains($pkg | ascii_downcase)) then 2
-      elif (.Description | ascii_downcase | contains($pkg | ascii_downcase)) then 3
-      else 4 end
-    )' > "$temp_file"
+install_from_github() {
+  local repo="$1"
 
-selected=$(jq -r '.[].Package' "$temp_file" | \
-  nl -v 0 | \
-  fzf --preview "idx=\$(echo {} | cut -f1); jq -r \".[\$idx] | \\\"📦 Package: \\\" + .Package + \\\"\\n🔖 Version: \\\" + (.Version // \\\"N/A\\\") + \\\"\\n👤 Author: \\\" + (.Author // \\\"N/A\\\") + \\\"\\n📧 Maintainer: \\\" + (.Maintainer // \\\"N/A\\\") + \\\"\\n📥 Downloads: \\\" + (.downloads // \\\"N/A\\\" | tostring) + \\\"\\n🔗 Dependencies: \\\" + (.Depends // \\\"None\\\") + \\\"\\n📋 Imports: \\\" + (.Imports // \\\"None\\\") + \\\"\\n\\n📝 Description:\\n\\\" + (.Description // \\\"No description\\\")\" \"$temp_file\" | fold -s -w 60" \
-      --preview-window=top:70%:wrap \
-      --bind 'q:abort' \
-      --prompt="Hit enter to select a package to install or q to quit.")
+  echo "Checking if repository exists..."
 
-echo "$selected"
+  # Check if repo exists
+  http_code=$(curl -s -o /dev/null -w "%{http_code}" "https://api.github.com/repos/$repo")
 
-if [ -z $selected ]; then
-            rm "$temp_file"
-            exit 0
+  if [[ "$http_code" == "404" ]]; then
+    echo "Error: Repository '$repo' not found on GitHub"
+    exit 1
+  elif [[ "$http_code" != "200" ]]; then
+    echo "Error: Could not verify repository (HTTP $http_code)"
+    exit 1
+  fi
+
+  # Get repo info for display
+  repo_info=$(curl -s "https://api.github.com/repos/$repo")
+  description=$(echo "$repo_info" | jq -r '.description // "No description"')
+  stars=$(echo "$repo_info" | jq -r '.stargazers_count')
+
+  echo ""
+  echo "Repository: $repo"
+  echo "Description: $description"
+  echo "Stars: $stars"
+  echo ""
+
+  # Check if remotes is installed
+  has_remotes=$(Rscript -e 'cat(requireNamespace("remotes", quietly = TRUE))' 2>/dev/null)
+
+  if [[ "$has_remotes" != "TRUE" ]]; then
+    echo "The 'remotes' package is required to install from GitHub."
+    read -rp "Install 'remotes' now? [Y/n] " response
+    if [[ -z "$response" || "$response" =~ ^[Yy]$ ]]; then
+      echo "Installing remotes..."
+      Rscript -e 'install.packages("remotes", repos = "https://cloud.r-project.org", quiet = TRUE)'
+    else
+      echo "Cannot install from GitHub without 'remotes' package."
+      exit 1
+    fi
+  fi
+
+  echo "Installing $repo from GitHub..."
+  echo ""
+  Rscript -e "remotes::install_github('$repo')"
+}
+
+search_cran() {
+  local pkg="$1"
+
+  if [[ -z "$pkg" ]]; then
+    echo "Error: No search term provided"
+    echo "Usage: brat install -s <term>"
+    exit 1
+  fi
+
+  temp_file=$(mktemp /tmp/brat_search_XXXXXX.json)
+
+  # Search by package name (with wildcard) and general content
+  encoded_query=$(printf '%s' "Package:${pkg}* OR ${pkg}" | jq -sRr @uri)
+  curl -s "https://search.r-pkg.org/package/_search?q=${encoded_query}&size=15" | \
+    jq --arg pkg "$pkg" '[.hits.hits[]._source] |
+      sort_by(
+        if .Package == $pkg then 0
+        elif (.Package | ascii_downcase | startswith($pkg | ascii_downcase)) then 1
+        elif (.Package | ascii_downcase | contains($pkg | ascii_downcase)) then 2
+        elif (.Description | ascii_downcase | contains($pkg | ascii_downcase)) then 3
+        else 4 end
+      )' > "$temp_file"
+
+  # Check if any results
+  result_count=$(jq 'length' "$temp_file")
+  if [[ "$result_count" == "0" ]]; then
+    echo "No packages found matching '$pkg'"
+    rm "$temp_file"
+    exit 1
+  fi
+
+  selected=$(jq -r '.[].Package' "$temp_file" | \
+    nl -v 0 | \
+    fzf --preview "idx=\$(echo {} | cut -f1); jq -r \".[\$idx] | \\\"📦 Package: \\\" + .Package + \\\"\\n🔖 Version: \\\" + (.Version // \\\"N/A\\\") + \\\"\\n👤 Author: \\\" + (.Author // \\\"N/A\\\") + \\\"\\n📧 Maintainer: \\\" + (.Maintainer // \\\"N/A\\\") + \\\"\\n📥 Downloads: \\\" + (.downloads // \\\"N/A\\\" | tostring) + \\\"\\n🔗 Dependencies: \\\" + (.Depends // \\\"None\\\") + \\\"\\n📋 Imports: \\\" + (.Imports // \\\"None\\\") + \\\"\\n\\n📝 Description:\\n\\\" + (.Description // \\\"No description\\\")\" \"$temp_file\" | fold -s -w 60" \
+        --preview-window=top:70%:wrap \
+        --bind 'q:abort' \
+        --prompt="Select a package to install (q to quit): ")
+
+  if [[ -z "$selected" ]]; then
+    rm "$temp_file"
+    exit 0
+  fi
+
+  clean_name=$(echo "$selected" | awk '{gsub(/^[0-9]+ /, ""); print}')
+  echo "Installing $clean_name..."
+  R -e "install.packages('$clean_name', repos = 'https://cloud.r-project.org')"
+  rm "$temp_file"
+}
+
+install_from_cran() {
+  local pkg="$1"
+
+  if [[ -z "$pkg" ]]; then
+    echo "Error: No package name provided"
+    echo "Usage: brat install <package>"
+    exit 1
+  fi
+
+  echo "Installing $pkg from CRAN..."
+
+  # Try to install, capture output
+  output=$(Rscript -e "
+    options(repos = c(CRAN = 'https://cloud.r-project.org'))
+    tryCatch({
+      install.packages('$pkg', quiet = FALSE)
+      if (!requireNamespace('$pkg', quietly = TRUE)) {
+        quit(status = 1)
+      }
+    }, error = function(e) {
+      quit(status = 1)
+    })
+  " 2>&1)
+
+  exit_code=$?
+
+  # Check if package was not found
+  if [[ $exit_code -ne 0 ]] || echo "$output" | grep -q "package.*is not available\|not available for this version"; then
+    echo ""
+    echo "Package '$pkg' not found on CRAN."
+    read -rp "Search for similar packages? [Y/n] " response
+    if [[ -z "$response" || "$response" =~ ^[Yy]$ ]]; then
+      search_cran "$pkg"
+    fi
+  else
+    echo "$output"
+  fi
+}
+
+# Parse arguments
+search_mode=false
+pkg=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -s|--search)
+      search_mode=true
+      shift
+      ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      show_help
+      exit 1
+      ;;
+    *)
+      pkg="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$pkg" ]]; then
+  echo "Error: No package specified"
+  show_help
+  exit 1
 fi
 
-clean_name=$(echo $selected |  awk '{gsub(/^[0-9]+ /, ""); print}')
-R -e "install.packages('$clean_name', repos = 'https://cloud.r-project.org')"
-rm "$temp_file"
+# Detect GitHub repo (contains /)
+if [[ "$pkg" =~ ^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$ ]]; then
+  install_from_github "$pkg"
+elif [[ "$search_mode" == true ]]; then
+  search_cran "$pkg"
+else
+  install_from_cran "$pkg"
+fi
