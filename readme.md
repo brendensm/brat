@@ -162,14 +162,6 @@ brat blog "My First Post"
 
 Creates a subdirectory with `index.qmd` ready for writing.
 
-### `brat logo`
-
-Display the brat ASCII art logo.
-
-```bash
-brat logo
-```
-
 ## Platform Support
 
 - **macOS** - fully supported
