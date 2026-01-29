@@ -136,4 +136,5 @@ else
 fi
 
 echo ""
+brat logo
 echo "Setup complete! Run 'brat help' to get started."
