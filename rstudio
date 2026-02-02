@@ -1,13 +1,42 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # brat rstudio - open RStudio, optionally with a project/directory
 
 open_rstudio() {
-  if [[ -z "$1" ]]; then
-    open -a RStudio
-  else
-    open -a RStudio "$1"
-  fi
+  case "$(uname -s)" in
+    Darwin)
+      # macOS
+      if [[ -z "$1" ]]; then
+        open -a RStudio
+      else
+        open -a RStudio "$1"
+      fi
+      ;;
+    Linux)
+      # Linux - rstudio should be in PATH
+      if ! command -v rstudio &> /dev/null; then
+        echo "Error: RStudio not found in PATH"
+        exit 1
+      fi
+      if [[ -z "$1" ]]; then
+        rstudio &> /dev/null &
+      else
+        rstudio "$1" &> /dev/null &
+      fi
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      # Windows (Git Bash, MSYS, Cygwin)
+      if [[ -z "$1" ]]; then
+        start rstudio
+      else
+        start rstudio "$1"
+      fi
+      ;;
+    *)
+      echo "Error: Unsupported operating system"
+      exit 1
+      ;;
+  esac
 }
 
 # No argument - just open RStudio

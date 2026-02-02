@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # brat install - install R packages from CRAN or GitHub
 
